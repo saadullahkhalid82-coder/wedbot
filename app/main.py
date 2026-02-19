@@ -232,13 +232,13 @@ def portal_mock_update(
         raise HTTPException(status_code=400, detail="Invalid field")
 
     old_data = (
-    supabase.table("users")
-    .select(req.field)
-    .eq("id", user_id)
-    .single()
-    .execute()
-    .data
-)
+        supabase.table("users")
+        .select(req.field)
+        .eq("id", user_id)
+        .single()
+        .execute()
+        .data
+    )
 
     supabase.table("users").update({
         req.field: req.value,
@@ -260,6 +260,7 @@ def fetch_tasks(
 ):
     return get_tasks(request.state.user["id"])
 
+
 @app.post("/tasks/complete")
 def mark_complete(
     title: str,
@@ -269,12 +270,12 @@ def mark_complete(
 ):
     complete_task(request.state.user["id"], title)
     log_audit_event(
-    user_id=request.state.user["id"],
-    action_type="task_completed",
-    old_value=None,
-    new_value={"task": title},
-    changed_by="chat"
-)
+        user_id=request.state.user["id"],
+        action_type="task_completed",
+        old_value=None,
+        new_value={"task": title},
+        changed_by="chat"
+    )
 
     return {"status": "ok"}
 
@@ -302,6 +303,7 @@ def export_checklist(
 ):
     return export_checklist_pdf(request.state.user["id"])
 
+
 @app.post("/schedule/generate")
 def schedule_generate(
     request: Request,
@@ -312,13 +314,12 @@ def schedule_generate(
 
     count = generate_weekly_schedule(user_id)
     log_audit_event(
-    user_id=user_id,
-    action_type="weekly_schedule_generated",
-    old_value=None,
-    new_value={"tasks_scheduled": count},
-    changed_by="chat"
-)
-
+        user_id=user_id,
+        action_type="weekly_schedule_generated",
+        old_value=None,
+        new_value={"tasks_scheduled": count},
+        changed_by="chat"
+    )
 
     return {
         "status": "weekly schedule generated",
@@ -356,7 +357,11 @@ def chat(
         user_id = request.state.user["id"]
         question = req.message.lower()
 
+        # =====================================================
+        # 2️⃣ STRESS ENGINE
+        # =====================================================
         if any(keyword in question for keyword in STRESS_KEYWORDS):
+
             breathing = get_random_wellness_content("breathing")
             affirmation = get_random_wellness_content("affirmation")
 
@@ -377,7 +382,11 @@ def chat(
             save_message(user_id, "assistant", reply)
             return {"reply": reply}
 
+        # =====================================================
+        # 3️⃣ CHECKLIST SHORT-CIRCUIT
+        # =====================================================
         if "checklist" in question and "create" in question:
+
             user = (
                 supabase.table("users")
                 .select("style,budget,guest_count,wedding_date")
@@ -386,14 +395,20 @@ def chat(
                 .execute()
                 .data
             )
+
             count = create_ai_checklist(user_id, user)
+
             reply = f"I’ve created your wedding checklist with {count} tasks."
+
             save_message(user_id, "user", req.message)
             save_message(user_id, "assistant", reply)
             return {"reply": reply}
 
-    
+        # =====================================================
+        # 4️⃣ LLM FLOW WITH FUNCTION CALLING
+        # =====================================================
         history = get_conversation(user_id)
+
         clean_history = [
             m for m in history
             if isinstance(m.get("content"), str)
@@ -405,11 +420,67 @@ def chat(
 
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
-            messages=messages
+            messages=messages,
+            functions=[
+                {
+                    "name": "update_user_detail",
+                    "description": "Update a wedding-related user detail",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "field": {"type": "string"},
+                            "value": {}
+                        },
+                        "required": ["field", "value"]
+                    }
+                },
+                {
+                    "name": "get_user_detail",
+                    "description": "Get a wedding-related user detail",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "field": {"type": "string"}
+                        },
+                        "required": ["field"]
+                    }
+                }
+            ],
+            function_call="auto"
         )
 
         msg = response.choices[0].message
-        reply = msg.get("content") or "I’m not sure how to help with that."
+
+  
+        if msg.get("function_call"):
+
+            fn_name = msg["function_call"]["name"]
+            args = json.loads(msg["function_call"]["arguments"])
+
+            if fn_name == "update_user_detail":
+                update_user_detail(
+                    user_id=user_id,
+                    field=args["field"],
+                    value=args["value"]
+                )
+                reply = f"Updated your {args['field']} successfully."
+
+            elif fn_name == "get_user_detail":
+                value = get_user_detail(
+                    user_id=user_id,
+                    field=args["field"]
+                )
+                reply = f"Your {args['field']} is {value}."
+
+            else:
+                reply = "I’m not sure how to help with that."
+
+        else:
+            reply = msg.get("content") or "I’m not sure how to help with that."
+
+
+        if not isinstance(reply, str):
+            reply = str(reply)
 
         save_message(user_id, "user", req.message)
         save_message(user_id, "assistant", reply)
