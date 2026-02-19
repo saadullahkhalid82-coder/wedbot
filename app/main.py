@@ -357,9 +357,6 @@ def chat(
         user_id = request.state.user["id"]
         question = req.message.lower()
 
-        # =====================================================
-        # 2️⃣ STRESS ENGINE
-        # =====================================================
         if any(keyword in question for keyword in STRESS_KEYWORDS):
 
             breathing = get_random_wellness_content("breathing")
@@ -382,9 +379,7 @@ def chat(
             save_message(user_id, "assistant", reply)
             return {"reply": reply}
 
-        # =====================================================
-        # 3️⃣ CHECKLIST SHORT-CIRCUIT
-        # =====================================================
+      
         if "checklist" in question and "create" in question:
 
             user = (
@@ -404,9 +399,7 @@ def chat(
             save_message(user_id, "assistant", reply)
             return {"reply": reply}
 
-        # =====================================================
-        # 4️⃣ LLM FLOW WITH FUNCTION CALLING
-        # =====================================================
+
         history = get_conversation(user_id)
 
         clean_history = [
