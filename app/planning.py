@@ -8,6 +8,26 @@ from app.prompts import CHECKLIST_PROMPT
 
 openai.api_key = OPENAI_API_KEY
 
+from datetime import datetime
+
+def save_tasks(user_id: str, tasks: list[dict], checklist_id: str | None = None):
+    rows = []
+
+    for t in tasks:
+        rows.append({
+            "user_id": user_id,
+            "checklist_id": checklist_id,  
+            "title": t["title"],
+            "status": "pending",
+            "completed": False,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+           
+         })
+
+    if rows:
+        supabase.table("tasks").insert(rows).execute()
+
 def create_checklist(user_id: str, title: str, tasks: List[str]) -> str:
     checklist = supabase.table("checklists").insert({
         "user_id": user_id,

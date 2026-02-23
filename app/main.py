@@ -252,13 +252,28 @@ def portal_mock_update(
         new_value={req.field: req.value},
         changed_by="portal"
     )
-
 @app.get("/tasks")
-def fetch_tasks(
+def get_or_generate_tasks(
     request: Request,
     _: None = Depends(verify_token)
 ):
-    return get_tasks(request.state.user["id"])
+    user_id = request.state.user["id"]
+
+    existing = get_tasks(user_id)
+    if existing and len(existing) > 0:
+        return existing
+
+    profile_res = supabase.table("users") \
+        .select("style, budget, guest_count, wedding_date") \
+        .eq("id", user_id) \
+        .single() \
+        .execute()
+
+    user_context = profile_res.data or {}
+
+    create_ai_checklist(user_id, user_context)
+
+    return get_tasks(user_id)
 
 
 @app.post("/tasks/complete")
