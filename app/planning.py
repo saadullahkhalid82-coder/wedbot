@@ -60,10 +60,10 @@ def add_task(user_id: str, title: str) -> None:
 
 def complete_task(user_id: str, title: str) -> None:
     supabase.table("tasks") \
-        .update({"status": "completed"}) \
-        .eq("user_id", user_id) \
-        .ilike("title", f"%{title}%") \
-        .execute()
+    .update({"status": "completed"}) \
+    .eq("user_id", user_id) \
+    .eq("title", title) \
+    .execute()
 
 
 def get_tasks(user_id: str, status: str = "pending"):
@@ -86,7 +86,8 @@ def create_ai_checklist(user_id: str, user_context: dict) -> int:
 
     response = openai.ChatCompletion.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
+        timeout=30
     )
 
     raw = response.choices[0].message["content"].strip()

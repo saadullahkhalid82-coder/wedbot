@@ -259,21 +259,38 @@ def get_or_generate_tasks(
 ):
     user_id = request.state.user["id"]
 
-    existing = get_tasks(user_id)
+    existing = (
+        supabase.table("tasks")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+        .data
+    )
+
     if existing and len(existing) > 0:
         return existing
 
-    profile_res = supabase.table("users") \
-        .select("style, budget, guest_count, wedding_date") \
-        .eq("id", user_id) \
-        .single() \
+    profile_res = (
+        supabase.table("users")
+        .select("style, budget, guest_count, wedding_date")
+        .eq("id", user_id)
+        .single()
         .execute()
+    )
 
     user_context = profile_res.data or {}
 
     create_ai_checklist(user_id, user_context)
 
-    return get_tasks(user_id)
+    new_tasks = (
+        supabase.table("tasks")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+        .data
+    )
+
+    return new_tasks
 
 
 @app.post("/tasks/complete")
@@ -309,6 +326,80 @@ def export_budget(
     _: None = Depends(verify_token)
 ):
     return export_budget_pdf(request.state.user["id"])
+
+
+class BudgetRequest(BaseModel):
+    total_budget: float
+
+
+@app.post("/budget")
+def create_budget(
+    req: BudgetRequest,
+    request: Request,
+    _: None = Depends(verify_token),
+    __: None = Depends(require_roles("bride", "groom"))
+):
+    user_id = request.state.user["id"]
+
+    create_budget_breakdown(user_id, req.total_budget)
+
+    return {"status": "budget created"}
+
+class ProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    city: str | None = None
+
+
+@app.get("/profile")
+def get_profile(
+    request: Request,
+    _: None = Depends(verify_token)
+):
+    user_id = request.state.user["id"]
+    user_email = request.state.user["email"]
+
+    user = (
+        supabase
+        .table("users")
+        .select("name, phone, city")
+        .eq("id", user_id)
+        .single()
+        .execute()
+        .data
+    )
+
+    return {
+        "email": user_email,
+        "name": user.get("name") if user else "",
+        "phone": user.get("phone") if user else "",
+        "city": user.get("city") if user else "",
+    }
+
+
+@app.put("/profile")
+def update_profile(
+    req: ProfileUpdateRequest,
+    request: Request,
+    _: None = Depends(verify_token)
+):
+    user_id = request.state.user["id"]
+
+    update_data = {
+        k: v for k, v in req.dict().items() if v is not None
+    }
+
+    if not update_data:
+        return {"status": "nothing to update"}
+
+    update_data["updated_at"] = datetime.utcnow().isoformat()
+
+    supabase.table("users") \
+        .update(update_data) \
+        .eq("id", user_id) \
+        .execute()
+
+    return {"status": "profile updated"}
 
 
 @app.get("/export/checklist")
@@ -359,6 +450,17 @@ def get_random_wellness_content(content_type: str):
         .execute()
     )
     return result.data[0] if result.data else None
+
+@app.get("/conversation")
+def get_conversation_history(
+    request: Request,
+    _: None = Depends(verify_token)
+):
+    user_id = request.state.user["id"]
+
+    messages = get_conversation(user_id)
+
+    return {"messages": messages}
 
 
 @app.post("/chat")
