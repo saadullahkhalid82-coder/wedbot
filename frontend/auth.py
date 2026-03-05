@@ -1,3 +1,4 @@
+from typing import Dict, Any
 import streamlit as st
 from supabase import create_client, Client
 
@@ -9,37 +10,95 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
 def login_page() -> None:
-    st.title("User Login")
+    st.title("Authentication")
 
-    email: str = st.text_input("Email")
-    password: str = st.text_input("Password", type="password")
+    tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
-    if st.button("Login"):
-        if not email or not password:
-            st.warning("Please enter email and password.")
-            return
+    with tab1:
+        st.subheader("User Login")
 
-        try:
-            with st.spinner("Authenticating..."):
-                response = supabase.auth.sign_in_with_password(
-                    {
-                        "email": email,
-                        "password": password,
-                    }
-                )
+        email: str = st.text_input("Email", key="login_email")
+        password: str = st.text_input(
+            "Password",
+            type="password",
+            key="login_password"
+        )
 
-            if not response.session:
-                st.error("Invalid login response.")
+        if st.button("Login"):
+            if not email or not password:
+                st.warning("Please enter email and password.")
                 return
 
-            token: str = response.session.access_token
+            try:
+                with st.spinner("Authenticating..."):
+                    response: Any = supabase.auth.sign_in_with_password(
+                        {
+                            "email": email,
+                            "password": password,
+                        }
+                    )
 
-            st.session_state["token"] = token
-            st.session_state["authenticated"] = True
-            st.session_state["user"] = response.user.email
+                if not response.session:
+                    st.error("Invalid login response.")
+                    return
 
-            st.success("Login successful.")
-            st.rerun()
+                token: str = response.session.access_token
 
-        except Exception as exc:
-            st.error(f"Login failed: {exc}")
+                st.session_state["token"] = token
+                st.session_state["authenticated"] = True
+                st.session_state["user"] = response.user.email
+
+                st.success("Login successful.")
+                st.rerun()
+
+            except Exception as exc:
+                st.error(f"Login failed: {exc}")
+
+    with tab2:
+        st.subheader("Create Account")
+
+        signup_email: str = st.text_input(
+            "Email",
+            key="signup_email"
+        )
+
+        signup_password: str = st.text_input(
+            "Password",
+            type="password",
+            key="signup_password"
+        )
+
+        confirm_password: str = st.text_input(
+            "Confirm Password",
+            type="password",
+            key="signup_confirm_password"
+        )
+
+        if st.button("Create Account"):
+            if not signup_email or not signup_password:
+                st.warning("Please fill all fields.")
+                return
+
+            if signup_password != confirm_password:
+                st.warning("Passwords do not match.")
+                return
+
+            try:
+                with st.spinner("Creating account..."):
+                    response: Dict[str, Any] = supabase.auth.sign_up(
+                        {
+                            "email": signup_email,
+                            "password": signup_password
+                        }
+                    )
+
+                if response.user is None:
+                    st.error("Signup failed.")
+                    return
+
+                st.success(
+                    "Account created successfully. Please login."
+                )
+
+            except Exception as exc:
+                st.error(f"Signup failed: {exc}")
