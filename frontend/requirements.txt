@@ -2,3 +2,8 @@ streamlit
 requests
 python-dotenv
 supabase
+fastapi
+uvicorn
+openai
+httpx
+pydantic
